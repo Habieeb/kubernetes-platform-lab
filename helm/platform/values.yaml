@@ -1,0 +1,24 @@
+backend:
+  namespace: backend
+  replicaCount: 3
+  image:
+    repository: nginx
+    tag: alpine
+  service:
+    port: 80
+    targetPort: 80
+
+frontend:
+  namespace: frontend
+  replicaCount: 1
+  image:
+    repository: curlimages/curl
+    tag: latest
+  nodeSelector:
+    kubernetes.io/hostname: platform-lab-worker
+
+namespaces:
+  - frontend
+  - backend
+  - database
+  - test
