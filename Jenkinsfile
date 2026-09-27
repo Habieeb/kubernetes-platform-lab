@@ -298,6 +298,26 @@ PY
             }
         }
 
+        stage('Select Existing AMI') {
+            when {
+                expression {
+                    return !params.BUILD_NEW_AMI
+                }
+            }
+
+            steps {
+                script {
+                    if (!params.EXISTING_AMI_ID?.trim()) {
+                        error('EXISTING_AMI_ID is required when BUILD_NEW_AMI is false')
+                    }
+
+                    env.NODE_AMI_ID = params.EXISTING_AMI_ID.trim()
+
+                    echo "Using existing AMI: ${env.NODE_AMI_ID}"
+                }
+            }
+        }
+
         stage('Verify Custom AMI') {
             steps {
                 withCredentials([
