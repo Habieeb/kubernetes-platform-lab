@@ -65,7 +65,7 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    trivy config terraform/
+                    trivy config --skip-dirs 'terraform/.terraform/**' terraform/
                 '''
             }
         }
