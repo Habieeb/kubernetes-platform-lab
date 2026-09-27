@@ -87,15 +87,63 @@ pipeline {
                 '''
             }
         }
+
+        stage('Terraform Plan') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'aws-credentials',
+                        usernameVariable: 'AWS_ACCESS_KEY_ID',
+                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                    )
+                ]) {
+                    dir('terraform') {
+                        sh '''
+                            set -eu
+                            echo "=== Terraform Plan ==="
+                            terraform plan -input=false -out=tfplan
+                            terraform show -no-color tfplan > tfplan.txt
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Approval') {
+            steps {
+                input message: 'Review Terraform plan. Apply these changes to AWS?',
+                      ok: 'Apply'
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'aws-credentials',
+                        usernameVariable: 'AWS_ACCESS_KEY_ID',
+                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                    )
+                ]) {
+                    dir('terraform') {
+                        sh '''
+                            set -eu
+                            echo "=== Terraform Apply ==="
+                            terraform apply -input=false tfplan
+                        '''
+                    }
+                }
+            }
+        }
     }
 
     post {
         success {
-            echo 'Infrastructure validation completed successfully.'
+            echo 'Infrastructure pipeline completed successfully.'
         }
 
         failure {
-            echo 'Infrastructure validation failed. Review the failed stage before proceeding.'
+            echo 'Infrastructure pipeline failed. Review the failed stage.'
         }
     }
 }
