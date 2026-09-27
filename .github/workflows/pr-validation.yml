@@ -72,7 +72,4 @@ jobs:
 
 
       - name: YAML Lint
-        run: |
-          yamllint \
-            --ignore 'helm/**' \
-            .
+        run: yamllint .
