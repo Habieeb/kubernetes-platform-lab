@@ -13,7 +13,9 @@ RUN apt-get update && \
         gnupg \
         lsb-release \
         ca-certificates \
-        git && \
+        git \
+        python3 && \
+    python3 --version && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Terraform

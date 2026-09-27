@@ -8,6 +8,20 @@ pipeline {
         disableConcurrentBuilds()
     }
 
+    parameters {
+        booleanParam(
+            name: 'BUILD_NEW_AMI',
+            defaultValue: false,
+            description: 'Build a new EKS worker AMI with Packer'
+        )
+
+        string(
+            name: 'EXISTING_AMI_ID',
+            defaultValue: '',
+            description: 'Existing custom AMI to use when BUILD_NEW_AMI is false'
+        )
+    }
+
     environment {
         AWS_REGION = 'eu-west-1'
     }
@@ -112,6 +126,13 @@ pipeline {
         }
 
         stage('Packer Preflight') {
+            when {
+                expression {
+                    return params.BUILD_NEW_AMI
+                }
+            }
+
+
             steps {
                 withCredentials([
                     usernamePassword(
@@ -185,6 +206,12 @@ pipeline {
         }
 
         stage('Approve Packer Build') {
+            when {
+                expression {
+                    return params.BUILD_NEW_AMI
+                }
+            }
+
             steps {
                 input message: 'Packer will launch temporary AWS resources and create an AMI/EBS snapshot. Build the custom EKS node AMI?',
                       ok: 'Build AMI'
@@ -192,6 +219,13 @@ pipeline {
         }
 
         stage('Packer Build') {
+            when {
+                expression {
+                    return params.BUILD_NEW_AMI
+                }
+            }
+
+
             steps {
                 withCredentials([
                     usernamePassword(
@@ -223,6 +257,13 @@ pipeline {
         }
 
         stage('Capture Packer AMI') {
+            when {
+                expression {
+                    return params.BUILD_NEW_AMI
+                }
+            }
+
+
             steps {
                 script {
                     env.NODE_AMI_ID = sh(
