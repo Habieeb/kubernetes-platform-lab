@@ -2,7 +2,8 @@ module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 21.0"
 
-  name = "platform-lab"
+  name               = "platform-lab"
+  kubernetes_version = "1.35"
 
   endpoint_public_access = true
 
