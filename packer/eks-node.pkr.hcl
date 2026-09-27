@@ -24,21 +24,24 @@ source "amazon-ebs" "eks_node" {
 
   source_ami_filter {
     filters = {
-      name                = "amazon-eks-node-${var.kubernetes_version}-v*"
+      name                = "amazon-eks-node-al2023-x86_64-standard-${var.kubernetes_version}-v*"
       root-device-type    = "ebs"
       virtualization-type = "hvm"
+      architecture        = "x86_64"
     }
 
     owners      = ["602401143452"]
     most_recent = true
   }
 
-  ami_name = "platform-lab-eks-${var.kubernetes_version}-{{timestamp}}"
+  ami_name = "platform-lab-eks-al2023-${var.kubernetes_version}-{{timestamp}}"
 
   tags = {
-    Name      = "platform-lab-eks-node"
-    Project   = "kubernetes-platform-lab"
-    ManagedBy = "Packer"
+    Name              = "platform-lab-eks-node"
+    Project           = "kubernetes-platform-lab"
+    ManagedBy         = "Packer"
+    KubernetesVersion = var.kubernetes_version
+    BaseOS            = "Amazon Linux 2023"
   }
 }
 
@@ -49,7 +52,7 @@ build {
     inline = [
       "echo 'Platform Lab custom EKS node AMI'",
       "sudo mkdir -p /opt/platform-lab",
-      "echo 'Built by Packer' | sudo tee /opt/platform-lab/README"
+      "echo 'Built by Packer from the AWS EKS-optimized AL2023 base image' | sudo tee /opt/platform-lab/README"
     ]
   }
 

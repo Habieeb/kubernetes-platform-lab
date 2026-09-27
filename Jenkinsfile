@@ -8,6 +8,10 @@ pipeline {
         disableConcurrentBuilds()
     }
 
+    environment {
+        AWS_REGION = 'eu-west-1'
+    }
+
     stages {
         stage('Verify Tooling') {
             steps {
@@ -88,6 +92,122 @@ pipeline {
             }
         }
 
+        stage('Packer Init and Validate') {
+            steps {
+                dir('packer') {
+                    sh '''
+                        set -eu
+
+                        echo "=== Packer Init ==="
+                        packer init .
+
+                        echo "=== Packer Format Check ==="
+                        packer fmt -check .
+
+                        echo "=== Packer Validate ==="
+                        packer validate .
+                    '''
+                }
+            }
+        }
+
+        stage('Approve Packer Build') {
+            steps {
+                input message: 'Packer will launch temporary AWS resources and create an AMI/EBS snapshot. Build the custom EKS node AMI?',
+                      ok: 'Build AMI'
+            }
+        }
+
+        stage('Packer Build') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'aws-credentials',
+                        usernameVariable: 'AWS_ACCESS_KEY_ID',
+                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                    )
+                ]) {
+                    dir('packer') {
+                        sh '''
+                            set -eu
+
+                            echo "=== Packer Build ==="
+
+                            rm -f manifest.json
+
+                            packer build \
+                              -var "aws_region=${AWS_REGION}" \
+                              .
+
+                            test -f manifest.json
+
+                            echo "=== Packer Manifest ==="
+                            cat manifest.json
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Capture Packer AMI') {
+            steps {
+                script {
+                    env.NODE_AMI_ID = sh(
+                        script: '''
+                            set -eu
+
+                            python3 - <<'PY'
+import json
+
+with open("packer/manifest.json") as f:
+    manifest = json.load(f)
+
+artifact_id = manifest["builds"][-1]["artifact_id"]
+
+# amazon-ebs manifest artifact_id is normally:
+# eu-west-1:ami-xxxxxxxxxxxxxxxxx
+ami_id = artifact_id.split(":")[-1]
+
+if not ami_id.startswith("ami-"):
+    raise SystemExit(
+        "Unable to extract AMI ID from artifact_id: " + artifact_id
+    )
+
+print(ami_id)
+PY
+                        ''',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Packer created AMI: ${env.NODE_AMI_ID}"
+                }
+            }
+        }
+
+        stage('Verify Custom AMI') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'aws-credentials',
+                        usernameVariable: 'AWS_ACCESS_KEY_ID',
+                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
+
+                        echo "=== Verify Custom AMI ==="
+
+                        aws ec2 describe-images \
+                          --region "${AWS_REGION}" \
+                          --image-ids "${NODE_AMI_ID}" \
+                          --query 'Images[0].[ImageId,Name,State,Architecture]' \
+                          --output table
+                    '''
+                }
+            }
+        }
+
         stage('Terraform Plan') {
             steps {
                 withCredentials([
@@ -100,8 +220,15 @@ pipeline {
                     dir('terraform') {
                         sh '''
                             set -eu
+
                             echo "=== Terraform Plan ==="
-                            terraform plan -input=false -out=tfplan
+                            echo "Using Packer AMI: ${NODE_AMI_ID}"
+
+                            terraform plan \
+                              -input=false \
+                              -var="node_ami_id=${NODE_AMI_ID}" \
+                              -out=tfplan
+
                             terraform show -no-color tfplan > tfplan.txt
                         '''
                     }
@@ -128,7 +255,10 @@ pipeline {
                     dir('terraform') {
                         sh '''
                             set -eu
+
                             echo "=== Terraform Apply ==="
+                            echo "Using reviewed Packer AMI: ${NODE_AMI_ID}"
+
                             terraform apply -input=false tfplan
                         '''
                     }
@@ -139,11 +269,15 @@ pipeline {
 
     post {
         success {
-            echo 'Infrastructure pipeline completed successfully.'
+            echo 'Packer AMI and infrastructure pipeline completed successfully.'
         }
 
         failure {
             echo 'Infrastructure pipeline failed. Review the failed stage.'
+        }
+
+        aborted {
+            echo 'Infrastructure pipeline was aborted.'
         }
     }
 }
