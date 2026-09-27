@@ -112,9 +112,10 @@ pipeline {
                         env.PACKER_CHANGED = (packerChanged != 0).toString()
                     } else {
                         echo 'No previous successful Jenkins commit found.'
-                        echo 'Treating Packer as changed for safe initial execution.'
 
-                        env.PACKER_CHANGED = 'true'
+                        echo 'Using existing approved AMI if available.'
+
+                        env.PACKER_CHANGED = 'false'
                     }
 
                     echo "Packer changed: ${env.PACKER_CHANGED}"
