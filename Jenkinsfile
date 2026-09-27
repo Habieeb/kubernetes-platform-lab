@@ -8,20 +8,6 @@ pipeline {
         disableConcurrentBuilds()
     }
 
-    parameters {
-        booleanParam(
-            name: 'BUILD_NEW_AMI',
-            defaultValue: false,
-            description: 'Build a new EKS worker AMI with Packer'
-        )
-
-        string(
-            name: 'EXISTING_AMI_ID',
-            defaultValue: '',
-            description: 'Existing custom AMI to use when BUILD_NEW_AMI is false'
-        )
-    }
-
     environment {
         AWS_REGION = 'eu-west-1'
     }
@@ -106,6 +92,36 @@ pipeline {
             }
         }
 
+        stage('Detect Changes') {
+            steps {
+                script {
+                    if (env.GIT_PREVIOUS_SUCCESSFUL_COMMIT) {
+                        echo "Previous successful commit: ${env.GIT_PREVIOUS_SUCCESSFUL_COMMIT}"
+                        echo "Current commit: ${env.GIT_COMMIT}"
+
+                        def packerChanged = sh(
+                            script: """
+                                git diff --quiet \
+                                  ${env.GIT_PREVIOUS_SUCCESSFUL_COMMIT} \
+                                  ${env.GIT_COMMIT} \
+                                  -- packer/
+                            """,
+                            returnStatus: true
+                        )
+
+                        env.PACKER_CHANGED = (packerChanged != 0).toString()
+                    } else {
+                        echo 'No previous successful Jenkins commit found.'
+                        echo 'Treating Packer as changed for safe initial execution.'
+
+                        env.PACKER_CHANGED = 'true'
+                    }
+
+                    echo "Packer changed: ${env.PACKER_CHANGED}"
+                }
+            }
+        }
+
         stage('Packer Init and Validate') {
             steps {
                 dir('packer') {
@@ -128,7 +144,7 @@ pipeline {
         stage('Packer Preflight') {
             when {
                 expression {
-                    return params.BUILD_NEW_AMI
+                    return env.PACKER_CHANGED == 'true'
                 }
             }
 
@@ -208,9 +224,10 @@ pipeline {
         stage('Approve Packer Build') {
             when {
                 expression {
-                    return params.BUILD_NEW_AMI
+                    return env.PACKER_CHANGED == 'true'
                 }
             }
+
 
             steps {
                 input message: 'Packer will launch temporary AWS resources and create an AMI/EBS snapshot. Build the custom EKS node AMI?',
@@ -221,9 +238,10 @@ pipeline {
         stage('Packer Build') {
             when {
                 expression {
-                    return params.BUILD_NEW_AMI
+                    return env.PACKER_CHANGED == 'true'
                 }
             }
+
 
 
             steps {
@@ -259,9 +277,10 @@ pipeline {
         stage('Capture Packer AMI') {
             when {
                 expression {
-                    return params.BUILD_NEW_AMI
+                    return env.PACKER_CHANGED == 'true'
                 }
             }
+
 
 
             steps {
@@ -298,25 +317,51 @@ PY
             }
         }
 
-        stage('Select Existing AMI') {
-            when {
-                expression {
-                    return !params.BUILD_NEW_AMI
+
+        stage('Resolve Existing AMI') {
+    when {
+        expression {
+            return !env.PACKER_CHANGED.toBoolean()
+        }
+    }
+
+    steps {
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'aws-credentials',
+                usernameVariable: 'AWS_ACCESS_KEY_ID',
+                passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+            )
+        ]) {
+            script {
+                env.NODE_AMI_ID = sh(
+                    script: '''
+                        set -eu
+
+                        aws ec2 describe-images \
+                          --region "$AWS_REGION" \
+                          --owners self \
+                          --filters \
+                            "Name=state,Values=available" \
+                            "Name=tag:Project,Values=kubernetes-platform-lab" \
+                            "Name=tag:ManagedBy,Values=Packer" \
+                            "Name=tag:KubernetesVersion,Values=1.35" \
+                            "Name=tag:Name,Values=platform-lab-eks-node" \
+                          --query 'sort_by(Images, &CreationDate)[-1].ImageId' \
+                          --output text
+                    ''',
+                    returnStdout: true
+                ).trim()
+
+                if (!env.NODE_AMI_ID || env.NODE_AMI_ID == 'None') {
+                    error('No existing Platform Lab AMI was found')
                 }
-            }
 
-            steps {
-                script {
-                    if (!params.EXISTING_AMI_ID?.trim()) {
-                        error('EXISTING_AMI_ID is required when BUILD_NEW_AMI is false')
-                    }
-
-                    env.NODE_AMI_ID = params.EXISTING_AMI_ID.trim()
-
-                    echo "Using existing AMI: ${env.NODE_AMI_ID}"
-                }
+                echo "Resolved existing AMI: ${env.NODE_AMI_ID}"
             }
         }
+    }
+}
 
         stage('Verify Custom AMI') {
             steps {
@@ -341,6 +386,7 @@ PY
                 }
             }
         }
+
 
         stage('Terraform Plan') {
             steps {
