@@ -28,6 +28,24 @@ pipeline {
             }
         }
 
+        stage('Verify AWS Identity') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'aws-credentials',
+                        usernameVariable: 'AWS_ACCESS_KEY_ID',
+                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
+                        echo "=== AWS Identity Check ==="
+                        aws sts get-caller-identity
+                    '''
+                }
+            }
+        }
+
         stage('Terraform Format') {
             steps {
                 dir('terraform') {
