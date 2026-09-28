@@ -12,6 +12,17 @@ module "eks" {
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.public_subnets
 
+  security_group_additional_rules = {
+    ingress_nodes_443 = {
+      description                = "Allow EKS worker nodes to reach the cluster API"
+      protocol                   = "tcp"
+      from_port                  = 443
+      to_port                    = 443
+      type                       = "ingress"
+      source_node_security_group = true
+    }
+  }
+
   eks_managed_node_groups = {
     bootstrap = {
       instance_types = ["t3.small"]
