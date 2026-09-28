@@ -16,7 +16,8 @@ module "eks" {
     bootstrap = {
       instance_types = ["t3.small"]
 
-      ami_id = var.node_ami_id
+      ami_id                     = var.node_ami_id
+      enable_bootstrap_user_data = true
 
       min_size     = 1
       max_size     = 1
