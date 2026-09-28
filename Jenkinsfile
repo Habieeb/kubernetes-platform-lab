@@ -95,6 +95,14 @@ pipeline {
         stage('Detect Changes') {
             steps {
                 script {
+                    env.IMAGE_REVISION = sh(
+                        script: "git ls-tree -r HEAD -- packer/ | git hash-object --stdin",
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Image revision: ${env.IMAGE_REVISION}"
+
+
                     if (env.GIT_PREVIOUS_SUCCESSFUL_COMMIT) {
                         echo "Previous successful commit: ${env.GIT_PREVIOUS_SUCCESSFUL_COMMIT}"
                         echo "Current commit: ${env.GIT_COMMIT}"
@@ -123,6 +131,58 @@ pipeline {
             }
         }
 
+        stage('Check Existing Image Revision') {
+    when {
+        expression {
+            return env.PACKER_CHANGED == 'true'
+        }
+    }
+
+    steps {
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'aws-credentials',
+                usernameVariable: 'AWS_ACCESS_KEY_ID',
+                passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+            )
+        ]) {
+            script {
+                def existingAmi = sh(
+                    script: '''
+                        set -eu
+
+                        aws ec2 describe-images \
+                          --region "$AWS_REGION" \
+                          --owners self \
+                          --filters \
+                            "Name=state,Values=available" \
+                            "Name=tag:Project,Values=kubernetes-platform-lab" \
+                            "Name=tag:ManagedBy,Values=Packer" \
+                            "Name=tag:KubernetesVersion,Values=1.35" \
+                            "Name=tag:ImageRevision,Values=${IMAGE_REVISION}" \
+                          --query 'sort_by(Images, &CreationDate)[-1].ImageId' \
+                          --output text
+                    ''',
+                    returnStdout: true
+                ).trim()
+
+                if (existingAmi && existingAmi != 'None') {
+                    env.NODE_AMI_ID = existingAmi
+                    env.BUILD_PACKER_AMI = 'false'
+
+                    echo "Existing AMI found for image revision."
+                    echo "Reusing AMI: ${env.NODE_AMI_ID}"
+                } else {
+                    env.BUILD_PACKER_AMI = 'true'
+
+                    echo "No AMI found for image revision ${env.IMAGE_REVISION}."
+                    echo 'A new AMI build is required.'
+                }
+            }
+        }
+    }
+}
+
         stage('Packer Init and Validate') {
             steps {
                 dir('packer') {
@@ -145,7 +205,7 @@ pipeline {
         stage('Packer Preflight') {
             when {
                 expression {
-                    return env.PACKER_CHANGED == 'true'
+                    return env.BUILD_PACKER_AMI == 'true'
                 }
             }
 
@@ -225,7 +285,7 @@ pipeline {
         stage('Approve Packer Build') {
             when {
                 expression {
-                    return env.PACKER_CHANGED == 'true'
+                    return env.BUILD_PACKER_AMI == 'true'
                 }
             }
 
@@ -239,7 +299,7 @@ pipeline {
         stage('Packer Build') {
             when {
                 expression {
-                    return env.PACKER_CHANGED == 'true'
+                    return env.BUILD_PACKER_AMI == 'true'
                 }
             }
 
@@ -275,14 +335,12 @@ pipeline {
             }
         }
 
-        stage('Capture Packer AMI') {
+                stage('Capture Packer AMI') {
             when {
                 expression {
-                    return env.PACKER_CHANGED == 'true'
+                    return env.BUILD_PACKER_AMI == 'true'
                 }
             }
-
-
 
             steps {
                 script {
@@ -315,54 +373,73 @@ PY
 
                     echo "Packer created AMI: ${env.NODE_AMI_ID}"
                 }
-            }
-        }
 
-
-        stage('Resolve Existing AMI') {
-    when {
-        expression {
-            return !env.PACKER_CHANGED.toBoolean()
-        }
-    }
-
-    steps {
-        withCredentials([
-            usernamePassword(
-                credentialsId: 'aws-credentials',
-                usernameVariable: 'AWS_ACCESS_KEY_ID',
-                passwordVariable: 'AWS_SECRET_ACCESS_KEY'
-            )
-        ]) {
-            script {
-                env.NODE_AMI_ID = sh(
-                    script: '''
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'aws-credentials',
+                        usernameVariable: 'AWS_ACCESS_KEY_ID',
+                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                    )
+                ]) {
+                    sh '''
                         set -eu
 
-                        aws ec2 describe-images \
+                        echo "Tagging ${NODE_AMI_ID} with image revision ${IMAGE_REVISION}"
+
+                        aws ec2 create-tags \
                           --region "$AWS_REGION" \
-                          --owners self \
-                          --filters \
-                            "Name=state,Values=available" \
-                            "Name=tag:Project,Values=kubernetes-platform-lab" \
-                            "Name=tag:ManagedBy,Values=Packer" \
-                            "Name=tag:KubernetesVersion,Values=1.35" \
-                            "Name=tag:Name,Values=platform-lab-eks-node" \
-                          --query 'sort_by(Images, &CreationDate)[-1].ImageId' \
-                          --output text
-                    ''',
-                    returnStdout: true
-                ).trim()
-
-                if (!env.NODE_AMI_ID || env.NODE_AMI_ID == 'None') {
-                    error('No existing Platform Lab AMI was found')
+                          --resources "$NODE_AMI_ID" \
+                          --tags "Key=ImageRevision,Value=${IMAGE_REVISION}"
+                    '''
                 }
-
-                echo "Resolved existing AMI: ${env.NODE_AMI_ID}"
             }
         }
-    }
-}
+
+        stage('Resolve Existing AMI') {
+            when {
+                expression {
+                    return !env.PACKER_CHANGED.toBoolean()
+                }
+            }
+
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'aws-credentials',
+                        usernameVariable: 'AWS_ACCESS_KEY_ID',
+                        passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+                    )
+                ]) {
+                    script {
+                        env.NODE_AMI_ID = sh(
+                            script: '''
+                                set -eu
+
+                                aws ec2 describe-images \
+                                  --region "$AWS_REGION" \
+                                  --owners self \
+                                  --filters \
+                                    "Name=state,Values=available" \
+                                    "Name=tag:Project,Values=kubernetes-platform-lab" \
+                                    "Name=tag:ManagedBy,Values=Packer" \
+                                    "Name=tag:KubernetesVersion,Values=1.35" \
+                                    "Name=tag:Name,Values=platform-lab-eks-node" \
+                                  --query 'sort_by(Images, &CreationDate)[-1].ImageId' \
+                                  --output text
+                            ''',
+                            returnStdout: true
+                        ).trim()
+
+                        if (!env.NODE_AMI_ID || env.NODE_AMI_ID == 'None') {
+                            error('No existing Platform Lab AMI was found')
+                        }
+
+                        echo "Resolved existing AMI: ${env.NODE_AMI_ID}"
+                    }
+                }
+            }
+        }
+
 
         stage('Verify Custom AMI') {
             steps {
