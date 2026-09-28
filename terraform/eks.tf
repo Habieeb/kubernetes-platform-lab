@@ -12,6 +12,10 @@ module "eks" {
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.public_subnets
 
+  node_security_group_tags = {
+    "karpenter.sh/discovery" = "platform-lab"
+  }
+
   addons = {
     vpc-cni = {
       before_compute = true
@@ -22,6 +26,10 @@ module "eks" {
     }
 
     coredns = {}
+
+    eks-pod-identity-agent = {
+      before_compute = true
+    }
   }
 
   security_group_additional_rules = {

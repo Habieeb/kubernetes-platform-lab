@@ -25,4 +25,8 @@ module "vpc" {
   public_subnet_tags = {
     "kubernetes.io/role/elb" = "1"
   }
+
+  public_subnet_tags = {
+    "karpenter.sh/discovery" = "platform-lab"
+  }
 }
