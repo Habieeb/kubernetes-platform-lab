@@ -12,6 +12,18 @@ module "eks" {
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.public_subnets
 
+  addons = {
+    vpc-cni = {
+      before_compute = true
+    }
+
+    kube-proxy = {
+      before_compute = true
+    }
+
+    coredns = {}
+  }
+
   security_group_additional_rules = {
     ingress_nodes_443 = {
       description                = "Allow EKS worker nodes to reach the cluster API"
