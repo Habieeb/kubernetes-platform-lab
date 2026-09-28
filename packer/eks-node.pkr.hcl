@@ -17,11 +17,6 @@ variable "kubernetes_version" {
   default = "1.35"
 }
 
-variable "git_commit" {
-  type        = string
-  description = "Git commit associated with this AMI build"
-}
-
 source "amazon-ebs" "eks_node" {
   region        = var.aws_region
   instance_type = "t3.small"
@@ -47,7 +42,6 @@ source "amazon-ebs" "eks_node" {
     ManagedBy         = "Packer"
     KubernetesVersion = var.kubernetes_version
     BaseOS            = "Amazon Linux 2023"
-    GitCommit         = var.git_commit
   }
 }
 
