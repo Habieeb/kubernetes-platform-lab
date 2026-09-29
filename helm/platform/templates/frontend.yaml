@@ -13,8 +13,10 @@ spec:
       labels:
         app: frontend
     spec:
+      {{- with .Values.frontend.nodeSelector }}
       nodeSelector:
-        kubernetes.io/hostname: {{ index .Values.frontend.nodeSelector "kubernetes.io/hostname" }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: frontend
           image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"

@@ -15,7 +15,7 @@ frontend:
     repository: curlimages/curl
     tag: latest
   nodeSelector:
-    kubernetes.io/hostname: platform-lab-worker
+    workload-type: application
 
 namespaces:
   - frontend
