@@ -1,0 +1,35 @@
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: platform-lab
+spec:
+  amiFamily: AL2023
+
+  role: "Karpenter-platform-lab-c5992a80cd22b37fd656ff811d"
+
+  amiSelectorTerms:
+    - tags:
+        Project: "kubernetes-platform-lab"
+        ManagedBy: "Packer"
+        KubernetesVersion: "1.35"
+        Approved: "true"
+
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "platform-lab"
+
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "platform-lab"
+
+  associatePublicIPAddress: true
+
+  metadataOptions:
+    httpEndpoint: enabled
+    httpProtocolIPv6: disabled
+    httpPutResponseHopLimit: 1
+    httpTokens: required
+
+  tags:
+    Project: "kubernetes-platform-lab"
+    ManagedBy: "Karpenter"

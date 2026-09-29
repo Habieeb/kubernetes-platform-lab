@@ -465,6 +465,59 @@ PY
             }
         }
 
+        stage('Promote Karpenter AMI') {
+    steps {
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'aws-credentials',
+                usernameVariable: 'AWS_ACCESS_KEY_ID',
+                passwordVariable: 'AWS_SECRET_ACCESS_KEY'
+            )
+        ]) {
+            sh '''
+                set -eu
+
+                echo "=== Promote Karpenter AMI ==="
+                echo "Selected AMI: ${NODE_AMI_ID}"
+
+                # Remove approval from any previously promoted Platform Lab AMI.
+                PREVIOUS_AMIS=$(aws ec2 describe-images \
+                  --region "${AWS_REGION}" \
+                  --owners self \
+                  --filters \
+                    "Name=state,Values=available" \
+                    "Name=tag:Project,Values=kubernetes-platform-lab" \
+                    "Name=tag:ManagedBy,Values=Packer" \
+                    "Name=tag:KubernetesVersion,Values=1.35" \
+                    "Name=tag:Approved,Values=true" \
+                  --query 'Images[].ImageId' \
+                  --output text)
+
+                for AMI in ${PREVIOUS_AMIS}; do
+                    if [ "${AMI}" != "${NODE_AMI_ID}" ]; then
+                        echo "Removing approval from previous AMI: ${AMI}"
+
+                        aws ec2 delete-tags \
+                          --region "${AWS_REGION}" \
+                          --resources "${AMI}" \
+                          --tags Key=Approved
+                    fi
+                done
+
+                # Promote the selected, verified AMI.
+                echo "Promoting ${NODE_AMI_ID}"
+
+                aws ec2 create-tags \
+                  --region "${AWS_REGION}" \
+                  --resources "${NODE_AMI_ID}" \
+                  --tags Key=Approved,Value=true
+
+                echo "AMI promotion complete."
+            '''
+        }
+    }
+}
+
 
         stage('Terraform Plan') {
             steps {
