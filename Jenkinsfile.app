@@ -57,9 +57,9 @@ pipeline {
                         sh '''
                             set -eu
 
-                            mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -B \
+                            mvn org.sonarsource.scanner.maven:sonar-maven-plugin:5.8.0.7211:sonar -B \
                               -Dsonar.projectKey=platform-lab-backend \
-                              -Dsonar.host.url=${SONAR_HOST_URL} \
+                              -Dsonar.host.url=http://platform-lab-sonarqube:9000 \
                               -Dsonar.token=${SONAR_AUTH_TOKEN}
                         '''
                     }
