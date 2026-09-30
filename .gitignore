@@ -35,3 +35,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 *.swp
+
+# Local SonarQube secrets
+sonarqube/.env

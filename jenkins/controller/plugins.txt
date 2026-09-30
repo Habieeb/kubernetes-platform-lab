@@ -1,0 +1,4 @@
+# Jenkins controller plugins intentionally required by this platform.
+# Keep versions pinned for reproducibility.
+
+sonar:2.19.0
