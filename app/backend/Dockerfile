@@ -13,6 +13,10 @@ FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --system --uid 10001 --create-home appuser
 
 COPY --from=build /workspace/target/backend-1.0.0.jar /app/app.jar
