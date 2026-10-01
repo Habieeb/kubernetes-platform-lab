@@ -137,6 +137,7 @@ pipeline {
                           --input platform-lab-backend-oci \
                           --severity HIGH,CRITICAL \
                           --exit-code 1 \
+                          --timeout 30m \
                           --no-progress
                     '''
                 }
