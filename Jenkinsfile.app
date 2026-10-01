@@ -113,16 +113,28 @@ pipeline {
             }
         }
 
+
         stage('Trivy Image Scan') {
             steps {
                 dir('app/backend') {
                     sh '''
                         set -eu
 
+                        echo "=== Prepare OCI layout for Trivy ==="
+
+                        rm -rf platform-lab-backend-oci
+                        mkdir -p platform-lab-backend-oci
+
+                        tar -xf platform-lab-backend.oci.tar \
+                          -C platform-lab-backend-oci
+
+                        test -f platform-lab-backend-oci/index.json
+                        test -f platform-lab-backend-oci/oci-layout
+
                         echo "=== Trivy image vulnerability scan ==="
 
                         trivy image \
-                          --input platform-lab-backend.oci.tar \
+                          --input platform-lab-backend-oci \
                           --severity HIGH,CRITICAL \
                           --exit-code 1 \
                           --no-progress
