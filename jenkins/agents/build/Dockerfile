@@ -4,6 +4,7 @@ USER root
 
 ARG MAVEN_VERSION=3.9.16
 ARG TRIVY_VERSION=0.72.0
+ARG BUILDKIT_VERSION=0.33.1
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -11,8 +12,10 @@ RUN apt-get update && \
         curl \
         git \
         gnupg \
+        skopeo \
         unzip && \
     rm -rf /var/lib/apt/lists/*
+
 
 # Install Maven
 RUN curl -fsSLo /tmp/maven.tar.gz \
@@ -36,5 +39,13 @@ RUN curl -fsSLo /tmp/awscliv2.zip \
     /tmp/aws/install && \
     rm -rf /tmp/aws /tmp/awscliv2.zip && \
     aws --version
+
+
+# Install BuildKit client
+RUN curl -fsSLo /tmp/buildkit.tar.gz \
+    "https://github.com/moby/buildkit/releases/download/v${BUILDKIT_VERSION}/buildkit-v${BUILDKIT_VERSION}.linux-amd64.tar.gz" && \
+    tar -xzf /tmp/buildkit.tar.gz -C /usr/local bin/buildctl && \
+    rm /tmp/buildkit.tar.gz && \
+    buildctl --version
 
 USER jenkins
