@@ -113,7 +113,6 @@ pipeline {
             }
         }
 
-
         stage('Trivy Image Scan') {
             steps {
                 dir('app/backend') {
@@ -179,6 +178,10 @@ pipeline {
 
                             echo "=== Obtain temporary ECR authorization ==="
 
+                            # Disable shell tracing while temporary
+                            # ECR authorization material is handled.
+                            set +x
+
                             ECR_PASSWORD=$(aws ecr get-login-password \
                               --region "${AWS_REGION}")
 
@@ -191,8 +194,12 @@ pipeline {
 EOF
 
                             chmod 600 "${WORKSPACE}/.docker/config.json"
-
                             export DOCKER_CONFIG="${WORKSPACE}/.docker"
+
+                            unset ECR_PASSWORD AUTH
+
+                            # Secret material is no longer held in shell variables.
+                            set -x
 
                             echo "=== Push Trivy-approved OCI artifact to ECR ==="
 
